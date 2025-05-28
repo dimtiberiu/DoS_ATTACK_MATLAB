@@ -1,0 +1,116 @@
+%% MITM Attack Detection - Analiza multi-metrică completă (fără warning-uri)
+clc; clear;
+
+%% 1. Simulare trafic: pachete pe secundă
+traffic = [poissrnd(10, 1, 300), poissrnd(25, 1, 100), poissrnd(10, 1, 300)];
+time = 1:length(traffic); % vector de timp în secunde
+
+% Zona de atac MITM (secunde 301–400)
+mitm_start = 301;
+mitm_end = 400;
+
+%% 2. Z-score pe frecvența traficului
+mean_t = mean(traffic(1:300));
+std_t = std(traffic(1:300));
+z_score = (traffic - mean_t) / std_t;
+anomalies_z = abs(z_score) > 3;
+
+%% 3. Simulare timestamps + ∆t
+timestamps = [];
+for t = 1:length(traffic)
+    new_packets = t + rand(1, traffic(t));  % distribuim pachetele aleator într-o secundă
+    timestamps = [timestamps, new_packets];
+end
+timestamps = sort(timestamps);
+dt = diff(timestamps);  % delta timp între pachete
+dt_threshold = mean(dt) - 3*std(dt);
+anomalies_dt = dt < dt_threshold;
+
+%% 4. Entropie și Varianță (ferestre glisante)
+window_size = 30;
+n_windows = floor(length(traffic)/window_size);
+entropy_values = zeros(1, n_windows);
+var_values = zeros(1, n_windows);
+entropy_times = zeros(1, n_windows);
+
+for i = 1:n_windows
+    start_idx = (i-1)*window_size + 1;
+    stop_idx = start_idx + window_size - 1;
+    window_data = traffic(start_idx:stop_idx);
+    p = histcounts(window_data, 10, 'Normalization', 'probability');
+    entropy_values(i) = -sum(p(p>0) .* log2(p(p>0)));
+    var_values(i) = var(window_data);
+    entropy_times(i) = mean([start_idx, stop_idx]);
+end
+
+%% 5. Alert System
+if sum(anomalies_z) > 10
+    disp('ALERTĂ: Activitate suspectă pe Z-score!');
+    beep; pause(0.2); beep;
+end
+
+if sum(anomalies_dt) > 30
+    disp('ALERTĂ: Pachete prea dese (∆t scăzut) - posibil MITM!');
+    beep; pause(0.1); beep; pause(0.1); beep;
+end
+
+%% 6. Vizualizări
+
+% Grafic 1: Trafic & Z-score
+figure;
+h1 = plot(time, traffic, 'b'); hold on;
+legend_entries = {'Trafic normal'};
+
+if any(anomalies_z)
+    h2 = plot(time(anomalies_z), traffic(anomalies_z), 'ro', 'MarkerSize', 6, 'LineWidth', 2);
+    legend_entries{end+1} = 'Anomalii Z-score';
+end
+
+xline(mitm_start, '--r', 'Start MITM');
+xline(mitm_end, '--r', 'End MITM');
+
+legend(legend_entries);
+title('Z-score: Detectarea unui atac MITM (trafic pe secundă)');
+xlabel('Timp (secunde)'); ylabel('Nr. pachete/sec');
+grid on;
+
+% Grafic 2: Delta t
+figure;
+h3 = plot(dt, 'k'); hold on;
+legend_dt = {'∆t între pachete'};
+
+if any(anomalies_dt)
+    h4 = plot(find(anomalies_dt), dt(anomalies_dt), 'mo', 'MarkerSize', 5);
+    legend_dt{end+1} = '∆t suspect (mic)';
+end
+
+legend(legend_dt);
+title('Delta timp între pachete (∆t)');
+xlabel('Index'); ylabel('∆t (secunde)');
+grid on;
+
+% Grafic 3: Entropie și Varianță
+figure;
+yyaxis left;
+plot(entropy_times, entropy_values, 'g', 'LineWidth', 2);
+ylabel('Entropie (bits)');
+yyaxis right;
+plot(entropy_times, var_values, 'm--', 'LineWidth', 2);
+ylabel('Varianță');
+xline(mitm_start, '--r'); xline(mitm_end, '--r');
+title('Entropie și Varianță pe ferestre glisante');
+xlabel('Timp (secunde)');
+grid on;
+
+% Grafic 4: K-means clustering
+entropy_interp = interp1(entropy_times, entropy_values, time, 'linear', 'extrap');
+features = [traffic' z_score' entropy_interp'];
+[idx_kmeans, ~] = kmeans(features, 2);
+
+figure;
+gscatter(time, traffic, idx_kmeans, 'rb', '..');
+xline(mitm_start, '--r'); xline(mitm_end, '--r');
+xlabel('Timp (secunde)'); ylabel('Pachete/sec');
+title('K-means clustering pe metrice combinate');
+legend('Cluster 1', 'Cluster 2');
+grid on;
