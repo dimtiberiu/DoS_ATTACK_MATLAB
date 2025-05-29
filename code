@@ -1,13 +1,13 @@
-%% MITM Attack Detection - Analiza multi-metrică completă (fără warning-uri)
+%% DoS Attack Detection - Analiza multi-metrică completă (fără warning-uri)
 clc; clear;
 
 %% 1. Simulare trafic: pachete pe secundă
 traffic = [poissrnd(10, 1, 300), poissrnd(25, 1, 100), poissrnd(10, 1, 300)];
 time = 1:length(traffic); % vector de timp în secunde
 
-% Zona de atac MITM (secunde 301–400)
-mitm_start = 301;
-mitm_end = 400;
+% Zona de atac DoS (secunde 301–400)
+DoS_start = 301;
+DoS_end = 400;
 
 %% 2. Z-score pe frecvența traficului
 mean_t = mean(traffic(1:300));
@@ -50,7 +50,7 @@ if sum(anomalies_z) > 10
 end
 
 if sum(anomalies_dt) > 30
-    disp('ALERTĂ: Pachete prea dese (∆t scăzut) - posibil MITM!');
+    disp('ALERTĂ: Pachete prea dese (∆t scăzut) - posibil DoS!');
     beep; pause(0.1); beep; pause(0.1); beep;
 end
 
@@ -66,11 +66,11 @@ if any(anomalies_z)
     legend_entries{end+1} = 'Anomalii Z-score';
 end
 
-xline(mitm_start, '--r', 'Start MITM');
-xline(mitm_end, '--r', 'End MITM');
+xline(DoS_start, '--r', 'Start DoS');
+xline(DoS_end, '--r', 'End DoS');
 
 legend(legend_entries);
-title('Z-score: Detectarea unui atac MITM (trafic pe secundă)');
+title('Z-score: Detectarea unui atac DoS (trafic pe secundă)');
 xlabel('Timp (secunde)'); ylabel('Nr. pachete/sec');
 grid on;
 
@@ -97,7 +97,7 @@ ylabel('Entropie (bits)');
 yyaxis right;
 plot(entropy_times, var_values, 'm--', 'LineWidth', 2);
 ylabel('Varianță');
-xline(mitm_start, '--r'); xline(mitm_end, '--r');
+xline(DoS_start, '--r'); xline(DoS_end, '--r');
 title('Entropie și Varianță pe ferestre glisante');
 xlabel('Timp (secunde)');
 grid on;
@@ -109,7 +109,7 @@ features = [traffic' z_score' entropy_interp'];
 
 figure;
 gscatter(time, traffic, idx_kmeans, 'rb', '..');
-xline(mitm_start, '--r'); xline(mitm_end, '--r');
+xline(DoS_start, '--r'); xline(DoS_end, '--r');
 xlabel('Timp (secunde)'); ylabel('Pachete/sec');
 title('K-means clustering pe metrice combinate');
 legend('Cluster 1', 'Cluster 2');
